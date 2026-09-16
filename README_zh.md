@@ -314,16 +314,16 @@ bash setup_eval_env_client.sh \
 
 - 未设置或 `sim`：真实仿真 backed 评测（集成已安装时）。
 - `debug`：离线接线检查 —— 无 Isaac、无真机，只验 shape 与 IO。
-- `offline`：把原生 Trajectory v1.0 HDF5 转成 Observation v1.0，走同一套 `eval_one_episode` 发给 policy server。默认数据目录是 `../data/<bench_name>/<task_name>/<env_cfg_type>/data/`，可用 `--data_path` 或 `XPL_OFFLINE_DATA_PATH` 覆盖。只认 xspark / RoboDojo v1.0，不认 Pipeline 的 `real` HDF5，也不按模型名改 wire obs。
+- `offline`：把原生 Trajectory v1.0 HDF5 转成 Observation v1.0，走同一套 `eval_one_episode` 发给 policy server。默认数据目录是 `../data/<bench_name>/<task_name>/<env_cfg_type>/data/`，可用 `--data_path` 或 `XPL_OFFLINE_DATA_PATH` 覆盖。
 - `real`：真机 client 路径（硬件集成存在时）。
 
 独立 offline replay（policy server 已启动）：
 
 ```bash
 python utils/offline_eval_client.py \
-  --bench_name RoboDojo --task_name stack_bowls --env_cfg_type arx_x5 \
-  --policy_name demo_policy --action_type joint \
-  --host localhost --port 19000 \
+  --bench_name <bench_name> --task_name <task_name> --env_cfg_type <env_cfg_type> \
+  --policy_name <POLICY> --action_type <action_type> \
+  --host localhost --port <policy_server_port> \
   --data_path /path/to/episode.hdf5
 ```
 
