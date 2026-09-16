@@ -79,6 +79,8 @@ COMMON_ARGS=(
 
 if [[ "${eval_env_mode}" == "debug" ]]; then
     bash "${UTILS_DIR}/run_debug_env_client.sh" "${COMMON_ARGS[@]}" "${protocol}"
+elif [[ "${eval_env_mode}" == "offline" ]]; then
+    bash "${UTILS_DIR}/run_offline_env_client.sh" "${COMMON_ARGS[@]}" "${protocol}"
 elif [[ "${eval_env_mode}" == "sim" ]]; then
     bash "${UTILS_DIR}/run_sim_env_client.sh" "${COMMON_ARGS[@]}" "${protocol}"
 elif [[ "${eval_env_mode}" == "real_world" ]]; then

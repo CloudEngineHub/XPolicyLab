@@ -1,5 +1,5 @@
 #!/bin/bash
-# Resolve EVAL_ENV_TYPE to sim, debug, or real_world.
+# Resolve EVAL_ENV_TYPE to sim, debug, offline, or real_world.
 # Empty or unset defaults to sim.
 
 resolve_eval_env_type() {
@@ -11,11 +11,14 @@ resolve_eval_env_type() {
         debug)
             echo "debug"
             ;;
+        offline)
+            echo "offline"
+            ;;
         real|real_world)
             echo "real_world"
             ;;
         *)
-            echo "[ERROR] Unknown EVAL_ENV_TYPE: '${raw}' (expected: sim, debug, real)" >&2
+            echo "[ERROR] Unknown EVAL_ENV_TYPE: '${raw}' (expected: sim, debug, offline, real)" >&2
             return 1
             ;;
     esac

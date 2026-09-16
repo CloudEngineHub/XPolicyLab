@@ -314,7 +314,18 @@ bash setup_eval_env_client.sh \
 
 - unset or `sim`: real simulator-backed evaluation, when the integration is installed.
 - `debug`: offline wiring check — no Isaac, no robot, just shapes and IO.
+- `offline`: replay native Trajectory v1.0 HDF5 as Observation v1.0 through the same `eval_one_episode` loop. Default episode directory is `../data/<bench_name>/<task_name>/<env_cfg_type>/data/`; override with `--data_path` or `XPL_OFFLINE_DATA_PATH`. Only xspark / RoboDojo v1.0 — not Pipeline `real` HDF5, and not per-policy wire observations.
 - `real`: real-robot client path, where the hardware integration exists.
+
+Standalone offline replay (policy server already running):
+
+```bash
+python utils/offline_eval_client.py \
+  --bench_name RoboDojo --task_name stack_bowls --env_cfg_type arx_x5 \
+  --policy_name demo_policy --action_type joint \
+  --host localhost --port 19000 \
+  --data_path /path/to/episode.hdf5
+```
 
 
 
