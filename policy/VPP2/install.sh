@@ -14,13 +14,13 @@ python -m pip install --upgrade pip
 python -m pip install "torch==${TORCH_VERSION}" "torchvision==${TORCHVISION_VERSION}" \
   --index-url "https://download.pytorch.org/whl/${TORCH_CUDA}"
 # Pin the public implementation used by this adapter.
-VPP2_REV=29bc4405129a60077172fefa6aad4beb6298dc47
+VPP2_REV=cc6fd680955b48d53545d53080b1b9e76fe050d1
 SOURCE_DIR="${SCRIPT_DIR}/upstream"
 if [[ -e "${SOURCE_DIR}" ]]; then
   echo "${SOURCE_DIR} already exists; use its installed environment or move it before reinstalling." >&2
   exit 1
 fi
-git clone https://github.com/Haodong-Yan/VPP2.git "${SOURCE_DIR}"
+git clone https://github.com/roboterax/video-prediction-policy-2.git "${SOURCE_DIR}"
 git -C "${SOURCE_DIR}" checkout --detach "${VPP2_REV}"
 CONSTRAINTS_FILE=$(mktemp)
 trap 'rm -f "${CONSTRAINTS_FILE}"' EXIT
