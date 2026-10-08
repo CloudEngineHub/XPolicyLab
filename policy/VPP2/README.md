@@ -25,7 +25,7 @@ bash download_checkpoints.sh
 python launch_policy.py --dry-run
 ```
 
-The installer pins the official code at `46669e6`, uses Python 3.10 and defaults
+The installer pins the official code at `3365872`, uses Python 3.10 and defaults
 to PyTorch 2.11 / CUDA 13.0. Select a compatible driver/build with
 `TORCH_VERSION`, `TORCHVISION_VERSION` and `TORCH_CUDA` if necessary.
 The reference GPU is one 96 GiB RTX PRO 6000; smaller devices are unverified.
