@@ -1,6 +1,6 @@
 # VPP2 — RoboDojo Adapter
 
-**Contributor:** [Haodong Yan](https://github.com/Haodong-Yan) | **Paper:** Video Prediction Policy 2: Predict Better, Act Better | **arXiv:** Coming soon | **Original code:** [Official VPP2 repository](https://github.com/roboterax/video-prediction-policy-2)
+**Contributor:** [Haodong Yan](https://github.com/Haodong-Yan) | **Paper:** Video Prediction Policy 2: Predict Better, Act Better | **arXiv:** [2610.10270](https://arxiv.org/abs/2610.10270) | **Original code:** [Official VPP2 repository](https://github.com/roboterax/video-prediction-policy-2)
 
 **Project page:** [Video Prediction Policy 2](https://robert-gyj.github.io/video-prediction-policy-2/)
 
@@ -25,7 +25,7 @@ bash download_checkpoints.sh
 python launch_policy.py --dry-run
 ```
 
-The installer pins the official code at `80dd48b`, uses Python 3.10 and defaults
+The installer pins the official code at `fbe5330`, uses Python 3.10 and defaults
 to PyTorch 2.11 / CUDA 13.0. Select a compatible driver/build with
 `TORCH_VERSION`, `TORCHVISION_VERSION` and `TORCH_CUDA` if necessary.
 The reference GPU is one 96 GiB RTX PRO 6000; smaller devices are unverified.
