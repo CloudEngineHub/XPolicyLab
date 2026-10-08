@@ -14,7 +14,7 @@ python -m pip install --upgrade pip
 python -m pip install "torch==${TORCH_VERSION}" "torchvision==${TORCHVISION_VERSION}" \
   --index-url "https://download.pytorch.org/whl/${TORCH_CUDA}"
 # Pin the public implementation used by this adapter.
-VPP2_REV=2353dbcc70497da91800ae9cfd082e2dcf4b605e
+VPP2_REV=29bc4405129a60077172fefa6aad4beb6298dc47
 SOURCE_DIR="${SCRIPT_DIR}/upstream"
 if [[ -e "${SOURCE_DIR}" ]]; then
   echo "${SOURCE_DIR} already exists; use its installed environment or move it before reinstalling." >&2
