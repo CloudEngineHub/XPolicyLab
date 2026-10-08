@@ -2,6 +2,8 @@
 
 **Contributor:** [Haodong Yan](https://github.com/Haodong-Yan) | **Paper:** Video Prediction Policy 2: Predict Better, Act Better | **arXiv:** Coming soon | **Original code:** [Official VPP2 repository](https://github.com/Haodong-Yan/VPP2)
 
+**Project page:** [Video Prediction Policy 2](https://robert-gyj.github.io/video-prediction-policy-2/)
+
 VPP2 combines a pretrained video model with an action expert for robot control.
 This adapter ports the ModelScope deployment entry points for the joint + 2B
 100k checkpoint to XPolicyLab, supporting **RoboDojo / arx_x5 / absolute EE16**.
