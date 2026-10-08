@@ -25,7 +25,7 @@ bash download_checkpoints.sh
 python launch_policy.py --dry-run
 ```
 
-The installer pins the official code at `0e6cc4e`, uses Python 3.10 and defaults
+The installer pins the official code at `46669e6`, uses Python 3.10 and defaults
 to PyTorch 2.11 / CUDA 13.0. Select a compatible driver/build with
 `TORCH_VERSION`, `TORCHVISION_VERSION` and `TORCH_CUDA` if necessary.
 The reference GPU is one 96 GiB RTX PRO 6000; smaller devices are unverified.
@@ -66,6 +66,18 @@ action shapes; they do not measure task success. For separate policy and
 simulator machines, use the [shared deployment flow](../../README.md#-deployment-flow).
 
 ## Model Assets
+
+The same released bundle is available on public [Hugging Face](https://huggingface.co/Haodong082399/VPP2).
+As an alternative to `download_checkpoints.sh`, download from the adapter directory:
+
+```bash
+hf download Haodong082399/VPP2 --local-dir . \
+  --include 'checkpoints/joint2b_s100000/**' \
+  --include 'checkpoints/Wan2.1-I2V-14B-480P/**'
+```
+
+Install the `hf` client in a download environment with
+`python -m pip install -U huggingface_hub` if needed.
 
 [ModelScope weights](https://modelscope.cn/models/haodong123/VPP2_preview)
 currently require an authorized account. Use an existing ModelScope SDK login
