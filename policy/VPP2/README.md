@@ -26,7 +26,7 @@ bash download_checkpoints.sh
 python launch_policy.py --dry-run
 ```
 
-The installer pins the official code at `ae9afab`, uses Python 3.10 and defaults
+The installer pins the official code at `ed39864`, uses Python 3.10 and defaults
 to PyTorch 2.11 / CUDA 13.0. Select a compatible driver/build with
 `TORCH_VERSION`, `TORCHVISION_VERSION` and `TORCH_CUDA` if necessary.
 The reference GPU is one 96 GiB RTX PRO 6000; smaller devices are unverified.
@@ -41,7 +41,7 @@ python -m pip install -r upstream/requirements-train.txt -c upstream/environment
 
 ## Data Processing
 
-Start with the public [RoboDojo EE16 LeRobot v3.0 export](https://huggingface.co/datasets/RoboDojo-Benchmark/RoboDojo/tree/main/data/RoboDojo_ee_lerobot_v30_video).
+Start with the public [RoboDojo EE16 LeRobot v3.0 export](https://huggingface.co/datasets/RoboDojo-Benchmark/RoboDojo/tree/cefcfbbf2497103fe46b99039dbd381976fe4a42/data/RoboDojo_ee_lerobot_v30_video).
 `process_data.sh convert` calls the official VPP2 converter to generate one
 native-frame EE16 Parquet and RGB T-shaped video per episode. It preserves the
 source action/state alignment and uses each camera's own episode timestamps.
@@ -52,6 +52,7 @@ From `policy/VPP2` in the activated policy environment:
 
 ```bash
 hf download RoboDojo-Benchmark/RoboDojo --repo-type dataset \
+  --revision cefcfbbf2497103fe46b99039dbd381976fe4a42 \
   --include 'data/RoboDojo_ee_lerobot_v30_video/**' --local-dir /data/robodojo_download
 export VPP2_SOURCE=/data/robodojo_download/data/RoboDojo_ee_lerobot_v30_video
 export VPP2_MEDIA_ROOT="$PWD/data/robodojo_source"
@@ -62,7 +63,8 @@ bash process_data.sh prepare \
   --media-root "$VPP2_MEDIA_ROOT" --output "$VPP2_PREPARED"
 ```
 
-Use fresh output directories. Conversion requires `ffmpeg` with `libx264`,
+Keep the pinned dataset revision to preserve task instructions and use fresh
+output directories. Conversion requires `ffmpeg` with `libx264`,
 3500 episodes / 1,856,102 frames at 25 Hz, and the released task inventory.
 Preparation builds the fixed 3466/34 split and critical sampling index, using
 the supplied normalization statistics. See the [data guide](https://github.com/roboterax/video-prediction-policy-2/blob/main/docs/training.md#convert-the-public-dataset)
