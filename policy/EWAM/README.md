@@ -1,6 +1,6 @@
 # EWAM
 
-**Contributor:** YINWANG | **Paper:** EWAM: Emergent Depth-Wise Specialization in a Unified Embodied Model — From Semantic Understanding through Visual Foresight to Action | **arXiv:** [2609.39973](https://arxiv.org/abs/2609.39973) | **Original code:** https://github.com/Wanghao00pro/EWAM
+**Contributor:** SYSU | **Paper:** EWAM: Emergent Depth-Wise Specialization in a Unified Embodied Model — From Semantic Understanding through Visual Foresight to Action | **arXiv:** [2609.39973](https://arxiv.org/abs/2609.39973) | **Original code:** https://github.com/Wanghao00pro/EWAM
 
 `EWAM` adapts the EWAM unified embodied model (Qwen3-VL-2B vision-language expert + Wan2.2-TI2V-5B video expert + action expert, jointly denoised by flow matching) to XPolicyLab for RoboTwin 2.0 (`aloha_agilex`, absolute joint control, 16-step chunks). This is an **eval-only** submission: the vendored inference subset of upstream EWAM (`models/`, `wan/`, `utils/`, `data/utils/`, `configs/ewam_robotwin.yaml`) lives in `EWAM/`; data conversion and training use the open-source upstream repository (released 2026-09-30).
 
