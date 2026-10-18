@@ -1,17 +1,24 @@
-"""XPolicyLab adapter for EWAM (RoboTwin dual-arm aloha_agilex, joint control).
+"""XPolicyLab adapter for EWAM (dual 6+1 arm joint control: RoboTwin aloha_agilex, RoboDojo arx_x5).
 
 Preprocessing mirrors EWAM's RoboTwin dim16 training pipeline
 (``EWAM/data/robotwin2/robotwin_data_convert/robotwin_converter.py`` +
 ``robotwin_agilex_dataset_dim16.py``) and the official RoboTwin deploy wrapper
-(``inference/robotwin/deploy_policy.py`` upstream):
+(``inference/robotwin/deploy_policy.py`` upstream). RoboDojo checkpoints use the same
+model config but the stage-2 RoboDojo loader: no scene prefix, each camera resized once
+onto the canvas, and 25 Hz data with global_downsample_rate=3, so every model action
+spans 3 env steps (see ``_BENCH_DEFAULTS``):
 
-    image   T-shape layout: cam_head on top, cam_left_wrist | cam_right_wrist
-            (each resized to half the head size) below, then aspect-preserving
-            resize + black padding to (video_height, video_width), RGB in [0, 1]
+    image   T-shape layout: cam_head on top, cam_left_wrist | cam_right_wrist below.
+            robotwin: wrists resized to half the head size, stitched, then aspect-
+            preserving resize + black padding to (video_height, video_width).
+            robodojo: each camera resized once onto the (video_height, video_width)
+            canvas, block centered vertically. RGB in [0, 1]
     text    scene prefix + task instruction (prefix must match training metas)
     state   [L arm 6, L grip 1, R arm 6, R grip 1] -> unified 16-dim
             [L arm 6, pad, L grip, R arm 6, pad, R grip], raw (no normalization)
-    action  16-dim chunk -> keep dims [0..5, 7, 8..13, 15] -> XPolicyLab joint dicts
+    action  16-dim chunk -> keep dims [0..5, 7, 8..13, 15] -> linear interpolation
+            from the current state to action_stride env steps per model action
+            -> XPolicyLab joint dicts
 """
 
 from __future__ import annotations
@@ -40,6 +47,15 @@ ROBOTWIN_SCENE_PREFIX = (
     "The aloha robot is currently performing the following task: "
 )
 
+# Per-benchmark defaults; each must match how that benchmark's released checkpoint was trained.
+_BENCH_DEFAULTS = {
+    "RoboTwin": {
+        "scene_prefix": ROBOTWIN_SCENE_PREFIX, "image_layout": "robotwin", "action_stride": 1, "clip_gripper": False,
+    },
+    "RoboDojo": {"scene_prefix": "", "image_layout": "robodojo", "action_stride": 3, "clip_gripper": False},
+}
+_IMAGE_LAYOUTS = ("robotwin", "robodojo")
+
 _EXPECTED_ARM_DIMS = [6, 6]
 _EXPECTED_EE_DIMS = [1, 1]
 _CAMERAS = ("cam_head", "cam_left_wrist", "cam_right_wrist")
@@ -50,6 +66,11 @@ def _is_none_like(value: Any) -> bool:
     if value is None:
         return True
     return isinstance(value, str) and value.strip().lower() in {"", "none", "null"}
+
+
+def _is_unset(value: Any) -> bool:
+    """Like _is_none_like, but an empty string is an explicit value."""
+    return value is None or (isinstance(value, str) and value.strip().lower() in {"none", "null"})
 
 
 def _as_bool(value: Any) -> bool:
@@ -114,8 +135,9 @@ def _resolve_checkpoint_file(model_cfg: dict) -> Path:
 
 def _instruction(obs: dict, fallback: str) -> str:
     value = obs.get("instruction")
-    if value is None:
-        value = obs.get("instructions")
+    for key in ("instructions", "task_instruction"):
+        if value is None:
+            value = obs.get(key)
     if isinstance(value, (list, tuple)):
         value = value[0] if value else None
     if isinstance(value, np.ndarray):
@@ -146,6 +168,39 @@ def _t_layout(head: np.ndarray, left: np.ndarray, right: np.ndarray) -> np.ndarr
     left = cv2.resize(left, (half_w, half_h))
     right = cv2.resize(right, (head_w - half_w, half_h))
     return np.vstack([head, np.hstack([left, right])])
+
+
+def _aspect_t_layout(
+    head: np.ndarray, left: np.ndarray, right: np.ndarray, video_size: tuple[int, int], resize_with_padding
+) -> np.ndarray:
+    """RoboDojo stage-2 stitch: each camera resized once onto a (H, W) canvas, block centered vertically."""
+    th, tw = video_size
+    split_w = tw // 2
+    right_w = tw - split_w
+
+    def natural_h(image: np.ndarray, target_w: int) -> int:
+        h, w = image.shape[:2]
+        return max(1, int(round(h * target_w / w)))
+
+    bot_h = min(max(natural_h(left, split_w), natural_h(right, right_w)), th - 1)
+    top_h = min(natural_h(head, tw), th - bot_h)
+    y0 = (th - top_h - bot_h) // 2
+    canvas = np.zeros((th, tw, 3), dtype=np.uint8)
+    canvas[y0 : y0 + top_h] = resize_with_padding(head, (top_h, tw))
+    yb = y0 + top_h
+    canvas[yb : yb + bot_h, :split_w] = resize_with_padding(left, (bot_h, split_w))
+    canvas[yb : yb + bot_h, split_w:] = resize_with_padding(right, (bot_h, right_w))
+    return canvas
+
+
+def _upsample_chunk(state14: np.ndarray, actions14: np.ndarray, stride: int) -> np.ndarray:
+    """Model actions are `stride` env steps apart; interpolate linearly from the current state."""
+    if stride <= 1:
+        return actions14
+    anchors = np.concatenate([state14[None], actions14], axis=0)
+    alphas = np.arange(1, stride + 1, dtype=np.float32)[:, None] / stride
+    segments = [(1 - alphas) * anchors[k] + alphas * anchors[k + 1] for k in range(len(actions14))]
+    return np.concatenate(segments, axis=0)
 
 
 def _joint_state(obs: dict) -> np.ndarray:
@@ -183,12 +238,28 @@ class Model(ModelTemplate):
         dim_info = get_robot_action_dim_info(self.env_cfg_type)
         if list(dim_info["arm_dim"]) != _EXPECTED_ARM_DIMS or list(dim_info["ee_dim"]) != _EXPECTED_EE_DIMS:
             raise ValueError(
-                f"EWAM RoboTwin checkpoints expect a dual 6+1 arm robot, got {dim_info} for {self.env_cfg_type}"
+                f"EWAM checkpoints expect a dual 6+1 arm robot, got {dim_info} for {self.env_cfg_type}"
             )
 
-        self.default_instruction = str(model_cfg.get("default_instruction") or "")
-        prefix = model_cfg.get("scene_prefix")
-        self.scene_prefix = ROBOTWIN_SCENE_PREFIX if _is_none_like(prefix) else str(prefix)
+        bench = str(model_cfg.get("bench_name") or "")
+        prefix, clip = model_cfg.get("scene_prefix"), model_cfg.get("clip_gripper")
+        if bench not in _BENCH_DEFAULTS and (_is_unset(prefix) or _is_unset(clip)):
+            raise ValueError(
+                f"no EWAM defaults for bench_name={bench!r} (known: {list(_BENCH_DEFAULTS)}); "
+                "set scene_prefix and clip_gripper explicitly in deploy.yml"
+            )
+        defaults = _BENCH_DEFAULTS.get(bench, {})
+        self.scene_prefix = defaults["scene_prefix"] if _is_unset(prefix) else str(prefix)
+        self.clip_gripper = defaults["clip_gripper"] if _is_unset(clip) else _as_bool(clip)
+        layout = model_cfg.get("image_layout")
+        self.image_layout = defaults.get("image_layout", "robotwin") if _is_none_like(layout) else str(layout)
+        if self.image_layout not in _IMAGE_LAYOUTS:
+            raise ValueError(f"image_layout must be one of {_IMAGE_LAYOUTS}, got {self.image_layout!r}")
+        stride = _optional_int(model_cfg.get("action_stride"))
+        self.action_stride = defaults.get("action_stride", 1) if stride is None else stride
+        if self.action_stride < 1:
+            raise ValueError(f"action_stride must be >= 1, got {self.action_stride}")
+        self.default_instruction = str(model_cfg.get("default_instruction") or "follow the instruction")
         self.replan_steps = _optional_int(model_cfg.get("replan_steps"))
         self.allow_dummy_policy = _as_bool(model_cfg.get("allow_dummy_policy"))
 
@@ -285,9 +356,12 @@ class Model(ModelTemplate):
     def _infer(self, obs: dict) -> list[dict]:
         state14 = _joint_state(obs)
         head, left, right = (_color(obs, camera) for camera in _CAMERAS)
-        image = _t_layout(head, left, right)
-        if image.shape[:2] != self.video_size:
-            image = self._resize_with_padding(image, self.video_size)
+        if self.image_layout == "robodojo":
+            image = _aspect_t_layout(head, left, right, self.video_size, self._resize_with_padding)
+        else:
+            image = _t_layout(head, left, right)
+            if image.shape[:2] != self.video_size:
+                image = self._resize_with_padding(image, self.video_size)
         instruction = f"{self.scene_prefix}{_instruction(obs, self.default_instruction)}"
 
         if self.allow_dummy_policy:
@@ -297,6 +371,10 @@ class Model(ModelTemplate):
 
         if self.replan_steps is not None:
             actions14 = actions14[: max(1, self.replan_steps)]
+        if self.clip_gripper:
+            actions14 = actions14.copy()
+            actions14[:, [6, 13]] = np.clip(actions14[:, [6, 13]], 0.0, 1.0)
+        actions14 = _upsample_chunk(state14, actions14, self.action_stride)
         return [
             {
                 "left_arm_joint_state": step[0:6].astype(np.float32),

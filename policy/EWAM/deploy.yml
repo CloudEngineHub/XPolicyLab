@@ -36,9 +36,20 @@ device: cuda
 num_inference_steps: null
 # Actions executed per chunk before re-planning. null -> full 16-step chunk.
 replan_steps: null
-# Prepended to every instruction; must match the training metas. null -> RoboTwin prefix.
+# Prepended to every instruction; must match the training metas.
+# null -> per-bench default (RoboTwin: aloha scene prefix, RoboDojo: none).
 scene_prefix: null
-default_instruction: ""
+# Camera stitch. null -> per-bench default.
+#   robotwin: stitch then resize (RoboTwin)  |  robodojo: per-camera aspect resize onto the canvas (RoboDojo stage-2 loader)
+image_layout: null
+# Env steps per model action (training global_downsample_rate relative to the env control rate);
+# the chunk is linearly interpolated from the current state. null -> per-bench default
+# (RoboTwin: 1, RoboDojo: 3 = 25 Hz env with gds=3, i.e. 48 env steps per 16-action chunk).
+action_stride: null
+# Clip gripper actions to [0, 1]. null -> per-bench default (false for both).
+clip_gripper: null
+# Used when an observation carries no instruction.
+default_instruction: follow the instruction
 # true skips weight loading and returns hold-position chunks (protocol
 # debugging only; never valid for a real evaluation).
 allow_dummy_policy: false

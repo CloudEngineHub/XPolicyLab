@@ -1,10 +1,10 @@
 #!/bin/bash
 set -euo pipefail
 
-# Download the released EWAM RoboTwin checkpoint plus the backbone files needed
+# Download a released EWAM checkpoint plus the backbone files needed
 # at inference time into policy/EWAM/checkpoints/.
 #
-#   bash download_checkpoints.sh [robotwin-c2r|robotwin-indomain]   (default: robotwin-c2r)
+#   bash download_checkpoints.sh [robotwin-c2r|robotwin-indomain|robodojo]   (default: robotwin-c2r)
 #
 # Honors HF_ENDPOINT (e.g. https://hf-mirror.com) and HF_TOKEN.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -12,8 +12,8 @@ CKPT_DIR="${EWAM_CKPT_DOWNLOAD_DIR:-${SCRIPT_DIR}/checkpoints}"
 setting="${1:-robotwin-c2r}"
 
 case "${setting}" in
-    robotwin-c2r|robotwin-indomain) ;;
-    *) echo "unknown setting: ${setting} (expected robotwin-c2r or robotwin-indomain)" >&2; exit 1 ;;
+    robotwin-c2r|robotwin-indomain|robodojo) ;;
+    *) echo "unknown setting: ${setting} (expected robotwin-c2r, robotwin-indomain or robodojo)" >&2; exit 1 ;;
 esac
 
 mkdir -p "${CKPT_DIR}"
