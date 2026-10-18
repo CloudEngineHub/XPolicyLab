@@ -1,3 +1,9 @@
+# EWAM conditions only on the observation at chunk start, so observations are sent to the
+# policy server once per chunk. Mid-chunk observations are rendered every VIDEO_FRAME_STRIDE
+# env steps only to feed the eval video; they are never sent to the server.
+VIDEO_FRAME_STRIDE = 3
+
+
 def eval_one_episode(TASK_ENV, model_client):
 
     model_client.call(func_name="reset") # reset policy
@@ -10,11 +16,11 @@ def eval_one_episode(TASK_ENV, model_client):
         for action_idx, action in enumerate(actions):
             TASK_ENV.take_action(action)
 
-            if TASK_ENV.is_episode_end() or action_idx + 1 == len(actions):
+            if TASK_ENV.is_episode_end():
                 break
 
-            obs = TASK_ENV.get_obs()
-            model_client.call(func_name="update_obs", obs=obs)
+            if (action_idx + 1) % VIDEO_FRAME_STRIDE == 0 and action_idx + 1 < len(actions):
+                TASK_ENV.get_obs()
 
 def eval_one_episode_batch(TASK_ENV, model_client):
 
@@ -31,7 +37,7 @@ def eval_one_episode_batch(TASK_ENV, model_client):
             current_action_list = [env_actions[action_idx] for env_actions in actions] # Get the current action list
             TASK_ENV.take_action_batch(current_action_list, env_idx_list) # Take the action
 
-            if TASK_ENV.is_episode_end() or action_idx + 1 == chunk_size: # Check whether the episode ends
+            if TASK_ENV.is_episode_end(): # Check whether the episode ends
                 break
 
             running = set(TASK_ENV.get_running_env_idx_list()) # Get the running environment index list
@@ -39,4 +45,7 @@ def eval_one_episode_batch(TASK_ENV, model_client):
 
             actions = [actions[i] for i in active_batch_idx] # Get the active action list
             env_idx_list = [env_idx_list[i] for i in active_batch_idx] # Get the active environment index list
-            model_client.call(func_name="update_obs_batch", obs=TASK_ENV.get_obs_batch(env_idx_list)) # Update the observation
+            if not env_idx_list:
+                break
+            if (action_idx + 1) % VIDEO_FRAME_STRIDE == 0 and action_idx + 1 < chunk_size:
+                TASK_ENV.get_obs_batch(env_idx_list)

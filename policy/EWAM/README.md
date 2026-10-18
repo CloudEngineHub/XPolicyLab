@@ -85,6 +85,7 @@ checkpoints/
 
 ## Notes
 
+- `deploy.py` differs from `demo_policy/deploy.py` in one way: EWAM conditions only on the observation at chunk start, so `update_obs` is called once per chunk instead of after every env step. Mid-chunk observations are rendered every 3 env steps for the eval video only and are not sent to the server. The executed actions are identical; this avoids sending ~2.7 MB of unused images per env step.
 - Each `get_action` returns the full chunk (`replan_steps: null`). The VAE decode of predicted frames is skipped since only actions are used.
 - `eval_batch: false`; `get_action_batch` loops over envs (one forward per env).
 - The policy process peaks at about 42 GiB allocated (`torch.cuda.max_memory_allocated`) / 43 GB as reported by `nvidia-smi` on an H20 (EWAM 8.5B parameters + UMT5-XXL encoder, both bf16); use a GPU with at least 48 GB. Loading takes about 3 minutes and one `get_action` (10 flow-matching steps) about 1.25 s on an H20.
