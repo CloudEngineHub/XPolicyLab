@@ -261,6 +261,9 @@ class Model(ModelTemplate):
             raise ValueError(f"action_stride must be >= 1, got {self.action_stride}")
         self.default_instruction = str(model_cfg.get("default_instruction") or "follow the instruction")
         self.replan_steps = _optional_int(model_cfg.get("replan_steps"))
+        self.max_batch_size = _optional_int(model_cfg.get("max_batch_size"))
+        if self.max_batch_size is not None and self.max_batch_size < 1:
+            raise ValueError(f"max_batch_size must be >= 1, got {self.max_batch_size}")
         self.allow_dummy_policy = _as_bool(model_cfg.get("allow_dummy_policy"))
 
         ewam_root = _activate_ewam_root(model_cfg.get("ewam_root"))
@@ -353,7 +356,7 @@ class Model(ModelTemplate):
         self.vlm_processor = AutoProcessor.from_pretrained(str(vlm_path), trust_remote_code=True)
         print(f"[EWAM] model loaded, chunk_size={self.chunk_size}, steps={self.num_inference_steps}")
 
-    def _infer(self, obs: dict) -> list[dict]:
+    def _prepare(self, obs: dict) -> tuple[np.ndarray, np.ndarray, str]:
         state14 = _joint_state(obs)
         head, left, right = (_color(obs, camera) for camera in _CAMERAS)
         if self.image_layout == "robodojo":
@@ -363,12 +366,20 @@ class Model(ModelTemplate):
             if image.shape[:2] != self.video_size:
                 image = self._resize_with_padding(image, self.video_size)
         instruction = f"{self.scene_prefix}{_instruction(obs, self.default_instruction)}"
+        return state14, image, instruction
 
+    def _infer(self, obs: dict) -> list[dict]:
+        return self._infer_batch([obs])[0]
+
+    def _infer_batch(self, obs_list: list[dict]) -> list[list[dict]]:
+        prepared = [self._prepare(obs) for obs in obs_list]
         if self.allow_dummy_policy:
-            actions14 = np.repeat(state14[None], self.chunk_size, axis=0)
+            chunks = [np.repeat(state14[None], self.chunk_size, axis=0) for state14, _, _ in prepared]
         else:
-            actions14 = self._predict(image, _unify_state_to_16(state14), instruction)
+            chunks = self._predict_batch(prepared)
+        return [self._to_env_actions(state14, actions14) for (state14, _, _), actions14 in zip(prepared, chunks)]
 
+    def _to_env_actions(self, state14: np.ndarray, actions14: np.ndarray) -> list[dict]:
         if self.replan_steps is not None:
             actions14 = actions14[: max(1, self.replan_steps)]
         if self.clip_gripper:
@@ -385,21 +396,42 @@ class Model(ModelTemplate):
             for step in actions14
         ]
 
-    def _predict(self, image: np.ndarray, state16: np.ndarray, instruction: str) -> np.ndarray:
+    def _predict_batch(self, prepared: list[tuple[np.ndarray, np.ndarray, str]]) -> list[np.ndarray]:
+        """One forward per group of envs whose VLM prompts have the same token length.
+
+        The joint attention has no padding mask for VLM tokens, so only equal-length
+        prompts may share a forward; a batch of one is exactly the single-env path.
+        """
         torch = self._torch
-        frame = torch.from_numpy(np.ascontiguousarray(image)).permute(2, 0, 1).float().div(255.0)
-        first_frame = frame.unsqueeze(0).to(self.device)
-        state = torch.from_numpy(state16).float().unsqueeze(0).to(self.device)
-
-        t5_out = self.t5_encoder([instruction], self.device)
-        if isinstance(t5_out, torch.Tensor):
-            t5_list = [t5_out.squeeze(0)] if t5_out.dim() == 3 else [t5_out]
-        else:
-            t5_list = list(t5_out)
-
-        vlm_inputs = self._preprocess_vlm_messages(instruction, self._tensor_to_pil(frame), self.vlm_processor)
-        if vlm_inputs is not None:
+        samples = []
+        for state14, image, instruction in prepared:
+            frame = torch.from_numpy(np.ascontiguousarray(image)).permute(2, 0, 1).float().div(255.0)
+            vlm_inputs = self._preprocess_vlm_messages(instruction, self._tensor_to_pil(frame), self.vlm_processor)
             vlm_inputs = {k: v.to(self.device) if isinstance(v, torch.Tensor) else v for k, v in vlm_inputs.items()}
+            samples.append((frame, _unify_state_to_16(state14), instruction, vlm_inputs))
+
+        groups: dict[int, list[int]] = {}
+        for i, sample in enumerate(samples):
+            groups.setdefault(int(sample[3]["input_ids"].shape[1]), []).append(i)
+        cap = self.max_batch_size or len(samples)
+        chunks: list[np.ndarray | None] = [None] * len(samples)
+        for indices in groups.values():
+            for start in range(0, len(indices), cap):
+                part = indices[start : start + cap]
+                for i, actions14 in zip(part, self._forward([samples[i] for i in part])):
+                    chunks[i] = actions14
+        return chunks
+
+    def _forward(self, samples: list[tuple]) -> list[np.ndarray]:
+        torch = self._torch
+        first_frame = torch.stack([s[0] for s in samples]).to(self.device)
+        state = torch.from_numpy(np.stack([s[1] for s in samples])).float().to(self.device)
+        t5_list = list(self.t5_encoder([s[2] for s in samples], self.device))
+        # Ewam precomputes the per-sample video grid for config.batch_size rows; RoPE and
+        # unpatchify only cover those rows, so it must match the forward's batch size.
+        video_module = self.model.video_module
+        if video_module.grid_sizes.shape[0] != len(samples):
+            video_module.grid_sizes = video_module.grid_sizes[:1].expand(len(samples), -1)
 
         with torch.no_grad():
             _, actions = self.model.inference_step(
@@ -407,11 +439,11 @@ class Model(ModelTemplate):
                 state=state,
                 num_inference_steps=self.num_inference_steps,
                 language_embeddings=t5_list,
-                vlm_inputs=[vlm_inputs] if vlm_inputs else None,
+                vlm_inputs=[s[3] for s in samples],
                 skip_decode=True,
             )
-        actions16 = actions.squeeze(0).float().cpu().numpy()
-        return actions16[..., _VALID_ACTION_DIMS]
+        actions16 = actions.float().cpu().numpy()
+        return [a[..., _VALID_ACTION_DIMS] for a in actions16]
 
     def update_obs(self, obs):
         self._obs = obs
@@ -430,7 +462,7 @@ class Model(ModelTemplate):
         missing = [i for i in env_ids if i not in self._obs_batch]
         if missing:
             raise RuntimeError(f"get_action_batch called before update_obs_batch for envs {missing}")
-        return [self._infer(self._obs_batch[i]) for i in env_ids]
+        return self._infer_batch([self._obs_batch[i] for i in env_ids])
 
     def reset(self):
         self._obs = None

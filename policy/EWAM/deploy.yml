@@ -1,6 +1,8 @@
 policy_name: EWAM
 protocol: ws
-# One env per call; get_action_batch loops over envs if eval_batch is enabled.
+# false: one env per sim process (the loop that produced the RoboDojo leaderboard results).
+# true: the sim client runs several envs per process (RoboDojo: sim.scene.num_envs) and
+# get_action_batch runs them in batched forwards (see max_batch_size).
 eval_batch: false
 
 # Server transport: overridden by setup_eval_policy_server.sh per launch.
@@ -36,6 +38,9 @@ device: cuda
 num_inference_steps: null
 # Actions executed per chunk before re-planning. null -> full 16-step chunk.
 replan_steps: null
+# Max envs per batched forward in get_action_batch (only envs whose VLM prompts have the
+# same token length share a forward). null -> no cap.
+max_batch_size: null
 # Prepended to every instruction; must match the training metas.
 # null -> per-bench default (RoboTwin: aloha scene prefix, RoboDojo: none).
 scene_prefix: null

@@ -73,7 +73,7 @@ checkpoints/
 
 ## Configuration
 
-`deploy.yml` keys to check before evaluation: `checkpoint_path`, `wan_path`, `vlm_path`, `ewam_root`, `ewam_config`, `device`, `num_inference_steps`, `replan_steps`, `scene_prefix`, `image_layout`, `action_stride`, `clip_gripper`, `default_instruction`, `allow_dummy_policy`.
+`deploy.yml` keys to check before evaluation: `checkpoint_path`, `wan_path`, `vlm_path`, `ewam_root`, `ewam_config`, `device`, `num_inference_steps`, `replan_steps`, `max_batch_size`, `scene_prefix`, `image_layout`, `action_stride`, `clip_gripper`, `default_instruction`, `allow_dummy_policy`.
 
 | Variable | Notes |
 |---|---|
@@ -87,6 +87,6 @@ checkpoints/
 
 - `deploy.py` differs from `demo_policy/deploy.py` in one way: EWAM conditions only on the observation at chunk start, so `update_obs` is called once per chunk instead of after every env step. Mid-chunk observations are rendered every 3 env steps for the eval video only and are not sent to the server. The executed actions are identical; this avoids sending ~2.7 MB of unused images per env step.
 - Each `get_action` returns the full chunk (`replan_steps: null`). The VAE decode of predicted frames is skipped since only actions are used.
-- `eval_batch: false`; `get_action_batch` loops over envs (one forward per env).
+- `eval_batch` defaults to `false` (one env per sim process), the setting that produced the reported RoboDojo results. With `eval_batch: true`, the RoboDojo client runs up to `sim.scene.num_envs` envs per process, and `get_action_batch` runs envs whose VLM prompts have the same token length (in practice, the same instruction) in one batched forward, capped by `max_batch_size`; batched and per-env actions agree to bf16 rounding. On an H20, a batch of 10 takes about 7.3 s (vs 1.25 s for one env), and inference peaks at about 34 GiB allocated (30 GiB for one env), below the 42 GiB loading peak.
 - The policy process peaks at about 42 GiB allocated (`torch.cuda.max_memory_allocated`) / 43 GB as reported by `nvidia-smi` on an H20 (EWAM 8.5B parameters + UMT5-XXL encoder, both bf16); use a GPU with at least 48 GB. Loading takes about 3 minutes and one `get_action` (10 flow-matching steps) about 1.25 s on an H20.
 - Upstream `configs/ewam_robotwin.yaml` writes `norm_eps: 1e-5`, which PyYAML loads as a string; `model.py` casts it to `float`.
