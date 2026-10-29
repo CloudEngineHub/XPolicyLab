@@ -2,7 +2,7 @@
 
 **Contributor:** EWAM Team | **Paper:** EWAM: Emergent Depth-Wise Specialization in a Unified Embodied Model — From Semantic Understanding through Visual Foresight to Action | **arXiv:** [2609.39973](https://arxiv.org/abs/2609.39973) | **Original code:** https://github.com/Wanghao00pro/EWAM
 
-`EWAM` adapts the EWAM unified embodied model (Qwen3-VL-2B vision-language expert + Wan2.2-TI2V-5B video expert + action expert, jointly denoised by flow matching) to XPolicyLab for RoboTwin 2.0 (`aloha_agilex`) and RoboDojo (`arx_x5`), with absolute joint control and 16-step chunks. This is an **eval-only** submission: the vendored inference subset of upstream EWAM (`models/`, `wan/`, `utils/`, `data/utils/`, `configs/ewam_robotwin.yaml`) lives in `EWAM/`; data conversion and training use the open-source upstream repository (released 2026-09-30).
+`EWAM` adapts the EWAM unified embodied model (Qwen3-VL-2B vision-language expert + Wan2.2-TI2V-5B video expert + action expert, jointly denoised by flow matching) to XPolicyLab for RoboTwin 2.0 (`aloha_agilex`) and RoboDojo (`arx_x5`), with absolute joint control and 16-step chunks. `EWAM/` holds the vendored upstream EWAM code (model, training, data loaders).
 
 Shared conventions — argument meanings, checkpoint naming, split-machine deployment, `EVAL_ENV_TYPE` — are documented in the [XPolicyLab README](../../README.md). Official results: [RoboDojo LeaderBoard](https://robodojo-benchmark.com/LeaderBoard).
 
@@ -25,11 +25,31 @@ pip install flash-attn --no-build-isolation
 
 ## Data Processing
 
-Unsupported in this adapter (eval-only). EWAM trains on RoboTwin 2.0 HDF5 converted by upstream [`data/robotwin2/robotwin_data_convert/`](https://github.com/Wanghao00pro/EWAM/tree/main/data/robotwin2) (T-shape three-view video + raw 14-D qpos), not on XPolicyLab LeRobot exports; it does not use the official LeRobot converters.
+```bash
+cd XPolicyLab/policy/EWAM
+bash process_data.sh <bench_name> <ckpt_name> <env_cfg_type> <action_type> [expert_data_num] [raw_task_dirs]
+
+# Example: first 50 clean demos of every RoboTwin task under ../data/RoboTwin/
+bash process_data.sh RoboTwin clean50 aloha_agilex joint 50 all
+
+# Example: every RoboDojo task under ../data/RoboDojo/
+bash process_data.sh RoboDojo all arx_x5 joint all
+```
+
+EWAM does not train on LeRobot exports. `process_data.sh` reads XPolicyLab-standard HDF5, and for RoboTwin also the RoboTwin 2.0 release layout (`<task>/demo_clean`; pass `<task>/demo_randomized` to add randomized demos); `expert_data_num` counts per task dir. RoboTwin output matches upstream [`robotwin_converter.py`](https://github.com/Wanghao00pro/EWAM/tree/main/data/robotwin2/robotwin_data_convert); for RoboDojo the HDF5 is read directly and only UMT5 embeddings are precomputed. UMT5 encoding needs a GPU and the Wan2.2 files from `download_checkpoints.sh`. Optional variables: `EWAM_RAW_DATA_ROOT` (default `../data/<bench_name>`), `EWAM_DATA_OUT_DIR`, `EWAM_WAN_PATH`, `EWAM_PROCESS_WORKERS`.
 
 ## Training
 
-Unsupported in this adapter (eval-only). Training code is open source in [upstream EWAM](https://github.com/Wanghao00pro/EWAM) (`train/`, `scripts/`, `configs/ewam_robotwin.yaml`; see its RoboTwin guide). The RoboDojo checkpoint uses the same `configs/ewam_robotwin.yaml` (only data paths differ). Released checkpoints are listed under [Model Assets](#model-assets).
+```bash
+cd XPolicyLab/policy/EWAM
+bash download_checkpoints.sh pretrain
+bash train.sh <bench_name> <ckpt_name> <env_cfg_type> <action_type> <seed> <gpu_id>
+
+# Example
+bash train.sh RoboTwin clean50 aloha_agilex joint 0 0,1,2,3,4,5,6,7
+```
+
+`train.sh` finetunes the released `pretrain` checkpoint with `EWAM/configs/ewam_robotwin.yaml` or `ewam_robodojo.yaml`. For multi-node runs, launch it on every node with `NNODES`, `NODE_RANK`, `MASTER_ADDR` and `MASTER_PORT`. The run directory's `pytorch_model` link points at the final step, so `eval.sh` takes the same `ckpt_name`. Optional variables: `EWAM_DATA_DIR`, `EWAM_PRETRAIN_PATH`, `EWAM_WAN_PATH`, `EWAM_VLM_PATH`, `EWAM_MAX_STEPS` (defaults to the released checkpoint's step count), `EWAM_REPORT_TO` (`tensorboard`, `wandb` or `all`), `EWAM_DRY_RUN=1`.
 
 ## Evaluation
 
@@ -55,11 +75,11 @@ bash eval.sh RoboDojo push_T robodojo arx_x5 joint 0 0 0 \
 
 ## Model Assets
 
-Released checkpoints are on [Hugging Face HaoWang00/EWAM](https://huggingface.co/HaoWang00/EWAM): `robotwin-c2r` (RoboTwin clean-to-randomized), `robotwin-indomain` (RoboTwin in-domain) and `robodojo` (RoboDojo), each a single `mp_rank_00_model_states.pt` (~17 GB) holding the full model. Inference additionally needs the Wan2.2 VAE, the UMT5-XXL text encoder, and the Qwen3-VL processor files. `download_checkpoints.sh` fetches only those files (honors `HF_ENDPOINT`):
+Released checkpoints are on [Hugging Face HaoWang00/EWAM](https://huggingface.co/HaoWang00/EWAM): `robotwin-c2r` (RoboTwin clean-to-randomized), `robotwin-indomain` (RoboTwin in-domain), `robodojo` (RoboDojo) and `pretrain` (the initialization `train.sh` finetunes from), each a single `mp_rank_00_model_states.pt` (~17 GB) holding the full model. Inference additionally needs the Wan2.2 VAE, the UMT5-XXL text encoder, and the Qwen3-VL processor files. `download_checkpoints.sh` fetches only those files (honors `HF_ENDPOINT`):
 
 ```bash
 cd XPolicyLab/policy/EWAM
-bash download_checkpoints.sh robotwin-c2r   # or robotwin-indomain / robodojo
+bash download_checkpoints.sh robotwin-c2r   # or robotwin-indomain / robodojo / pretrain
 ```
 
 Resulting layout:
