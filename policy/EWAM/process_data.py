@@ -26,9 +26,10 @@ import numpy as np
 import torch
 
 POLICY_DIR = Path(__file__).resolve().parent
-ROOT_DIR = POLICY_DIR.parents[1]
+# Parent of this checkout: `import XPolicyLab` and `<parent>/data/<bench>`.
+WORKSPACE_DIR = POLICY_DIR.parents[2]
 EWAM_ROOT = POLICY_DIR / "EWAM"
-for path in (ROOT_DIR, EWAM_ROOT):
+for path in (WORKSPACE_DIR, EWAM_ROOT):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
@@ -253,7 +254,7 @@ def main() -> None:
             parser.error("raw_task_dirs was provided twice")
         raw_task_dirs, args.expert_data_num = args.expert_data_num, None
     args.expert_data_num = int(args.expert_data_num) if args.expert_data_num else 0
-    args.raw_root = args.raw_root or ROOT_DIR.parent / "data" / args.bench_name
+    args.raw_root = args.raw_root or WORKSPACE_DIR / "data" / args.bench_name
     out_dir = args.out_dir or (
         POLICY_DIR / "data" / f"{args.bench_name}-{args.ckpt_name}-{args.env_cfg_type}-{args.action_type}")
 
